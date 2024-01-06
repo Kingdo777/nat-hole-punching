@@ -1,52 +1,12 @@
 #!/usr/bin/env python
+import os
 import sys
 import logging
-import socket
-import struct
-from threading import Event, Thread
 from util import *
-
+from hole_punch import *
 
 logger = logging.getLogger('client')
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-STOP = Event()
-
-
-def accept(port):
-    logger.info("accept %s", port)
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    s.bind(('', port))
-    s.listen(1)
-    s.settimeout(5)
-    while not STOP.is_set():
-        try:
-            conn, addr = s.accept()
-        except socket.timeout:
-            continue
-        else:
-            logger.info("Accept %s connected!", port)
-            # STOP.set()
-
-
-def connect(local_addr, addr):
-    logger.info("connect from %s to %s", local_addr, addr)
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    s.bind(local_addr)
-    while not STOP.is_set():
-        try:
-            s.connect(addr)
-        except socket.error:
-            continue
-        # except Exception as exc:
-        #     logger.exception("unexpected exception encountered")
-        #     break
-        else:
-            logger.info("connected from %s to %s success!", local_addr, addr)
-            # STOP.set()
 
 
 def main(host='54.187.46.146', port=5005):
@@ -70,25 +30,21 @@ def main(host='54.187.46.146', port=5005):
         pub_addr, priv_addr, client_pub_addr, client_priv_addr,
     )
 
-    threads = {
-        '0_accept': Thread(target=accept, args=(priv_addr[1],)),
-        '1_accept': Thread(target=accept, args=(client_pub_addr[1],)),
-        '2_connect': Thread(target=connect, args=(priv_addr, client_pub_addr,)),
-        '3_connect': Thread(target=connect, args=(priv_addr, client_priv_addr,)),
-    }
-    for name in sorted(threads.keys()):
-        logger.info('start thread %s', name)
-        threads[name].start()
+    con = hole_punch(pub_addr, priv_addr, client_pub_addr, client_priv_addr)[0]
 
-    while threads:
-        keys = list(threads.keys())
-        for name in keys:
-            try:
-                threads[name].join(1)
-            except TimeoutError:
-                continue
-            if not threads[name].is_alive():
-                threads.pop(name)
+    print(con)
+
+    if os.fork() != 0:
+        while True:
+            data = input()
+            con.send(data.encode('utf-8'))
+    else:
+        while True:
+            data = con.recv(1024).decode('utf-8')
+            if data == 'quit' or data is None:
+                break
+            elif data:
+                print("received data:", data)
 
 
 if __name__ == '__main__':
