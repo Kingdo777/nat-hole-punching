@@ -13,10 +13,6 @@ def get_time():
     return str(datetime.now()).split()[1].split(".")[0] + " "
 
 
-NAT_HOLEPUNCH_ACCEPT_TIMEOUT = 1
-NAT_HOLEPUNCH_TIMEOUT = 2
-
-
 class Accept_Thread(threading.Thread):
 
     def __init__(self, port, thread_id):
@@ -36,7 +32,7 @@ class Accept_Thread(threading.Thread):
         self.s.bind((get_ip(), port))
         self.debug("Setting socket to listening settings...")
         self.s.listen(1)
-        self.s.settimeout(NAT_HOLEPUNCH_ACCEPT_TIMEOUT)
+        self.s.settimeout(1)
 
     def debug(self, a):
         print(get_time() + "ACCEPT THREAD " + str(self.thread_id) + ": " + a)
@@ -90,6 +86,7 @@ class Connect_Thread(threading.Thread):
                 self.debug("Sucecssful connection established! Exiting thread loop...")
                 self.running = False
                 self.return_value = self.s
+                print(self.return_value)
             except socket.error:
                 continue
         self.debug("Terminating thread...")
@@ -102,7 +99,7 @@ def hole_punch(client_public_endpoint, client_private_endpoint, peer_public_endp
     threads = [Accept_Thread(client_public_endpoint[1], 1),
                Accept_Thread(client_private_endpoint[1], 2),
                Connect_Thread(client_private_endpoint, peer_public_endpoint, 1),
-               Connect_Thread(client_private_endpoint, peer_private_endpoint, 1)]
+               Connect_Thread(client_private_endpoint, peer_private_endpoint, 2)]
     # start all thread objects
     print(get_time() + "Starting hole punch threads...")
     start = datetime.now()
@@ -110,8 +107,7 @@ def hole_punch(client_public_endpoint, client_private_endpoint, peer_public_endp
     # wait for one of the threads to produce a return value
     print(get_time() + "Awaiting processed return value from hole punch threads...")
     while not [thread for thread in threads if
-               thread.return_value] and datetime.now().second - start.second < NAT_HOLEPUNCH_TIMEOUT: pass
-    if not [thread for thread in threads if thread.return_value]: return []  # timeout return value
+               thread.return_value]: pass
     # set running to False for all threads
     print(get_time() + "Return value found. Setting remaining threads to stop...")
     for thread in threads: thread.running = False
